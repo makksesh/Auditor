@@ -1,0 +1,2 @@
+[console_scripts]
+auditor-server = auditor_server.main:main

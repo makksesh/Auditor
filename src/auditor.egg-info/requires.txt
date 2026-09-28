@@ -1,0 +1,7 @@
+fastapi<1,>=0.115
+uvicorn[standard]<1,>=0.34
+faster-whisper<2,>=1.1
+ctranslate2<5,>=4.5
+sentencepiece<1,>=0.2
+huggingface-hub<2,>=0.30
+numpy<3,>=2

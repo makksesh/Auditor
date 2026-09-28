@@ -29,4 +29,5 @@ Thumbs.db
 
 # Local application data
 data/
+models/
 uploads/
