@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from auditor_server.main import app, valid_start
-from auditor_server.models import Models
+from auditor_server.models import Models, source_eos_token
 from auditor_server.stream import AudioStream
 from auditor_server.text import SentenceAssembler, agreed_prefix
 
@@ -130,6 +130,7 @@ class ServerTests(unittest.TestCase):
 
         class Translator:
             def translate_batch(self, source, **options):
+                self.source = source
                 self.options = options
                 return [type("Result", (), {"hypotheses": [["ok"]]})()]
 
@@ -138,10 +139,14 @@ class ServerTests(unittest.TestCase):
         model.target_spm = Pieces()
         model.translator = Translator()
         model._translation_lock = threading.Lock()
+        model._source_eos = "</s>"
         self.assertEqual(model.translate("a" * 300), "ok")
+        self.assertEqual(model.translator.source[0][-1], "</s>")
         self.assertEqual(model.translator.options["max_decoding_length"], 128)
         self.assertGreater(model.translator.options["repetition_penalty"], 1)
         self.assertGreater(model.translator.options["no_repeat_ngram_size"], 0)
+        self.assertEqual(source_eos_token({"add_source_eos": False, "eos_token": "</s>"}), "</s>")
+        self.assertIsNone(source_eos_token({"add_source_eos": True, "eos_token": "</s>"}))
 
     def test_two_hour_stream_does_not_retain_old_audio(self):
         stream = AudioStream()

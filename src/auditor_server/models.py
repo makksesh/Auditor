@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import threading
 from pathlib import Path
@@ -10,6 +11,11 @@ import numpy as np
 
 
 TRANSLATION_REPO = "jiangzhuo9357/opus-mt-en-ru-ct2"
+
+
+def source_eos_token(config: dict) -> str | None:
+    """Transformers conversions expect the tokenizer to supply source EOS."""
+    return config.get("eos_token", "</s>") if config.get("add_source_eos") is False else None
 
 
 class Models:
@@ -33,9 +39,11 @@ class Models:
                 allow_patterns=["config.json", "model.bin", "shared_vocabulary.json", "source.spm", "target.spm"],
             )
         model_path = Path(model_dir)
-        for filename in ("model.bin", "source.spm", "target.spm"):
+        for filename in ("model.bin", "config.json", "source.spm", "target.spm"):
             if not (model_path / filename).is_file():
                 raise RuntimeError(f"Translation model lacks {filename}: {model_path}")
+        config = json.loads((model_path / "config.json").read_text(encoding="utf-8"))
+        self._source_eos = source_eos_token(config)
 
         translation_device = os.getenv("AUDITOR_TRANSLATION_DEVICE", "cpu")
         self.translator = ctranslate2.Translator(str(model_path), device=translation_device)
@@ -62,6 +70,8 @@ class Models:
     def translate(self, text: str) -> str:
         with self._translation_lock:
             source = self.source_spm.encode(text, out_type=str)
+            if self._source_eos and (not source or source[-1] != self._source_eos):
+                source.append(self._source_eos)
             max_length = min(128, max(24, int(len(source) * 1.8) + 8))
             result = self.translator.translate_batch(
                 [source],
