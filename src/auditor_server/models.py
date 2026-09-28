@@ -19,7 +19,8 @@ class Models:
         import sentencepiece as spm
         from huggingface_hub import snapshot_download
 
-        self._lock = threading.Lock()
+        self._asr_lock = threading.Lock()
+        self._translation_lock = threading.Lock()
         asr_name = os.getenv("AUDITOR_ASR_MODEL", "distil-large-v3")
         device = os.getenv("AUDITOR_DEVICE", "cuda")
         compute_type = os.getenv("AUDITOR_COMPUTE_TYPE", "float16")
@@ -46,7 +47,7 @@ class Models:
             self.transcribe(np.zeros(16000, dtype=np.float32))
 
     def transcribe(self, samples: np.ndarray) -> str:
-        with self._lock:
+        with self._asr_lock:
             segments, _ = self.asr.transcribe(
                 samples,
                 language="en",
@@ -59,7 +60,14 @@ class Models:
             return " ".join(segment.text.strip() for segment in segments).strip()
 
     def translate(self, text: str) -> str:
-        source = self.source_spm.encode(text, out_type=str)
-        with self._lock:
-            result = self.translator.translate_batch([source], beam_size=2)
-        return self.target_spm.decode(result[0].hypotheses[0]).strip()
+        with self._translation_lock:
+            source = self.source_spm.encode(text, out_type=str)
+            max_length = min(128, max(24, int(len(source) * 1.8) + 8))
+            result = self.translator.translate_batch(
+                [source],
+                beam_size=2,
+                max_decoding_length=max_length,
+                repetition_penalty=1.12,
+                no_repeat_ngram_size=4,
+            )
+            return self.target_spm.decode(result[0].hypotheses[0]).strip()
