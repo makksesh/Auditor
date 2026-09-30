@@ -1,7 +1,7 @@
 [project]
 name = "auditor"
-version = "0.1.0"
-description = "Local English speech recognition and Russian subtitle server"
+version = "0.2.0"
+description = "Local English and Russian speech recognition server"
 requires-python = ">=3.14"
 dependencies = [
     "fastapi>=0.115,<1",

@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from auditor_server.main import app, valid_start
-from auditor_server.models import Models, source_eos_token
+from auditor_server.models import InferenceResult, TranslationModel, source_eos_token
 from auditor_server.stream import AudioStream
 from auditor_server.text import SentenceAssembler, agreed_prefix
 
@@ -27,11 +27,21 @@ def pcm(seconds: float, amplitude: int = 6000) -> bytes:
 
 
 class FakeModels:
+    def __init__(self, profile):
+        self.profile = profile
+        self.closed = False
+
+    def describe(self):
+        return {"asr": {"name": "fake", "language": self.profile.source_language}, "translation": None}
+
+    def close(self):
+        self.closed = True
+
     def transcribe(self, samples):
-        return "Hello, friend."
+        return InferenceResult("Привет, друг." if self.profile.source_language == "ru" else "Hello, friend.", 4)
 
     def translate(self, text):
-        return "Привет, друг."
+        return InferenceResult("Привет, друг.", 5)
 
 
 class ServerTests(unittest.TestCase):
@@ -134,13 +144,13 @@ class ServerTests(unittest.TestCase):
                 self.options = options
                 return [type("Result", (), {"hypotheses": [["ok"]]})()]
 
-        model = Models.__new__(Models)
+        model = TranslationModel.__new__(TranslationModel)
         model.source_spm = Pieces()
         model.target_spm = Pieces()
         model.translator = Translator()
         model._translation_lock = threading.Lock()
         model._source_eos = "</s>"
-        self.assertEqual(model.translate("a" * 300), "ok")
+        self.assertEqual(model.run("a" * 300).text, "ok")
         self.assertEqual(model.translator.source[0][-1], "</s>")
         self.assertEqual(model.translator.options["max_decoding_length"], 128)
         self.assertGreater(model.translator.options["repetition_penalty"], 1)
